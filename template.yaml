@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+
+Parameters:
+  AutoPublishAliasName:
+    Type: String
+    Default: current
+    Description: The alias used for Auto Publishing
+  StageName:
+    Type: String
+    Default: prod
+    Description: The Lambda Function and API Gateway Stage
+
+Outputs:
+
+  ExampleAPIUrl:
+    Value: !Sub "https://${ExampleAPI}.execute-api.${AWS::Region}.amazonaws.com/${StageName}/"
+
+Resources:
+
+  ExampleFunction:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      AutoPublishAlias: !Ref AutoPublishAliasName
+      FunctionName: !Sub Example-${StageName}
+      Handler: index.handler
+      Runtime: nodejs6.10
+      CodeUri: ./api-proxy-lambda.zip
+      Environment:
+        Variables:
+          STAGE: !Ref StageName
+          REGION: !Ref "AWS::Region"
+      Role: !GetAtt ExampleFunctionIAMRole.Arn
+      Events:
+        AnyRequest:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+            RestApiId:
+              Ref: ExampleAPI
+
+  ExampleFunctionIAMRole:
+   Type: "AWS::IAM::Role"
+   Properties:
+     Path: "/"
+     ManagedPolicyArns:
+         - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+     AssumeRolePolicyDocument:
+       Version: "2012-10-17"
+       Statement:
+         -
+           Effect: "Allow"
+           Action:
+             - "sts:AssumeRole"
+           Principal:
+             Service:
+               - "lambda.amazonaws.com"
+     Policies: # Inline Policies
+       -
+         PolicyName: "CW-Logs"
+         PolicyDocument:
+           Version: "2012-10-17"
+           Statement:
+             -
+               Effect: "Allow"
+               Action:
+                 - "logs:*"
+               Resource: "*"
+
+  ExampleAPI:
+    Type: 'AWS::Serverless::Api'
+    Properties:
+      StageName: !Ref StageName
+      DefinitionBody:
+        swagger: 2.0
+        info:
+          title: !Sub Example-api-${StageName}
+        paths:
+          /:
+            x-amazon-apigateway-any-method:
+              produces:
+                - application/json
+              x-amazon-apigateway-integration:
+                uri:
+                  !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ExampleFunction.Arn}:${AutoPublishAliasName}/invocations"
+                passthroughBehavior: when_no_match
+                httpMethod: POST
+                type: aws_proxy
