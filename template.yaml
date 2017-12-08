@@ -10,6 +10,10 @@ Parameters:
     Type: String
     Default: prod
     Description: The Lambda Function and API Gateway Stage
+  FunctionName:
+    Type: String
+    Default: Example
+    Description: The Lambda Function Name
 
 Outputs:
 
@@ -22,7 +26,7 @@ Resources:
     Type: 'AWS::Serverless::Function'
     Properties:
       AutoPublishAlias: !Ref AutoPublishAliasName
-      FunctionName: !Sub Example-${StageName}
+      FunctionName: !Sub ${FunctionName}-${StageName}
       Handler: index.handler
       Runtime: nodejs6.10
       CodeUri: ./api-proxy-lambda.zip
@@ -39,6 +43,18 @@ Resources:
             Method: ANY
             RestApiId:
               Ref: ExampleAPI
+
+  ExampleAPILambdaPermission:
+    DependsOn : ExampleFunction
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: lambda:InvokeFunction
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExampleAPI}/*"
+      FunctionName:
+        !Sub
+        - ${FuncArn}:current
+        - { FuncArn: !GetAtt ExampleFunction.Arn }
+      Principal: apigateway.amazonaws.com
 
   ExampleFunctionIAMRole:
    Type: "AWS::IAM::Role"
@@ -75,7 +91,7 @@ Resources:
       DefinitionBody:
         swagger: 2.0
         info:
-          title: !Sub Example-api-${StageName}
+          title: !Sub API-${FunctionName}-${StageName}
         paths:
           /:
             x-amazon-apigateway-any-method:
